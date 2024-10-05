@@ -22,6 +22,8 @@
 
 The application uses a configuration file `config.ini` to store settings. The default configuration is created automatically.
 
+For more information, refer to `anime1.py`.
+
 ## Download or Build Executable
 
 ### Download Executable
