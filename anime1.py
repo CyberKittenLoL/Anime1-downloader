@@ -33,7 +33,15 @@ CONFIG_DEFAULT = {
     # }
 }
 
-def init_config():
+def init_config() -> configparser.ConfigParser:
+    """
+    Initializes and loads the configuration settings.
+    This function reads the configuration from a file specified by CONFIG_PATH.
+    If the file exists, it updates any missing keys with default values from CONFIG_DEFAULT.
+    If the file does not exist or an error occurs while reading it, the function uses the default configuration.
+    Returns:
+        configparser.ConfigParser: The loaded configuration object.
+    """
     config = configparser.ConfigParser()
     if os.path.exists(CONFIG_PATH):
         try:
@@ -60,7 +68,7 @@ def init_config():
     return config
 
 class Anime1_downloader:
-    def __init__(self):
+    def __init__(self) -> None:
         self.stop_flag = threading.Event()
         
         self.config = init_config()
@@ -73,7 +81,7 @@ class Anime1_downloader:
         self.download_helper: DownloadHelper
         self.tkHelper = tkHelper(self.logger)
         
-    def init_logging(self):
+    def init_logging(self) -> None:
         """
         Initializes the logging configuration based on the config file.
         """
@@ -155,7 +163,7 @@ class Anime1_downloader:
 
         return self.exit_code
     
-    def init_app(self):
+    def init_app(self) -> None:
         """
         Initializes the application window for the Anime1 Downloader.
         This method sets up the main window with a title, background color, and centers it on the screen.
@@ -363,7 +371,7 @@ class Anime1_downloader:
         
         self.root.bind("<Return>", lambda e: on_submit_download(data, selected_episodes))
 
-    def download_ui(self, data, eps):
+    def download_ui(self, data, eps) -> None:
         """
         Sets up and displays the download user interface.
         Parameters:
@@ -421,7 +429,7 @@ class Anime1_downloader:
         self.root.progress_bar.process_queue()
         self.root.update()
 
-    def update_progress(self, downloaded_size, total_size):
+    def update_progress(self, downloaded_size, total_size) -> None:
         """
         Updates the progress bar and labels with the current download progress.
 
@@ -441,7 +449,19 @@ class Anime1_downloader:
         )
         self.root.update()
 
-    def download_episodes(self, data, eps):
+    def download_episodes(self, data, eps) -> None:
+        """
+        Downloads a list of episodes concurrently using a thread pool.
+        Args:
+            data (dict): Metadata about the episodes to be downloaded, including the title.
+            eps (list): List of episodes to be downloaded.
+        Returns:
+            None
+        This method initializes the download UI, logs the start of the download process,
+        and creates a thread to handle the download tasks. It uses a ThreadPoolExecutor
+        to download episodes concurrently. The progress of each episode is updated in the UI,
+        and the method handles stopping the download process if a stop flag is set.
+        """
         self.download_ui(data, eps)
         self.logger.debug("Starting download of %s episodes", len(eps))
         start_time = time.time()
@@ -507,7 +527,7 @@ class Anime1_downloader:
         self.logger.info(f"Time taken: {time.time() - start_time:.2f} seconds")
         self.download_complete(data["title"])
 
-    def download_complete(self, title=None):
+    def download_complete(self, title=None) -> None:
         """
         Updates the progress bar label to indicate that the download is complete,
         and creates a frame with two buttons: one to download another anime and
@@ -581,13 +601,37 @@ class Anime1_downloader:
     def download_search_all(self, search):
         pass
     
-    def restart_app(self):
+    def restart_app(self) -> None:
+        """
+        Restarts the application by clearing the current window and re-initializing the app.
+
+        This method logs a debug message indicating that the app is restarting, clears the
+        current window using the tkHelper utility, and then calls the start method to 
+        reinitialize the application.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
         self.logger.debug("Restarting the app")
-        # self.root.destroy()
         tkHelper.clear_window(self.root)
         self.start(True)
     
-    def exit_app(self, code=None):
+    def exit_app(self, code=None) -> None:
+        """
+        Exits the application gracefully.
+        This method performs the following steps:
+        1. Clears the current window.
+        2. Displays a message indicating that the application is exiting.
+        3. Displays a message to wait for the download to finish.
+        4. Sets the stop flag to signal any ongoing processes to stop.
+        5. Waits for the download thread to finish if it is still running.
+        6. Logs the exit code and destroys the root window.
+        Args:
+            code (int, optional): The exit code to use. If not provided, the default exit code is used.
+        """
         tkHelper.clear_window(self.root)
         label = tk.Label(
             self.root,
