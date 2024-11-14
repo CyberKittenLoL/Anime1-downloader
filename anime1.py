@@ -271,8 +271,8 @@ class Anime1_downloader:
             data = {
                 "title": "",
                 "total episode": 0,
-                "names": [],
-                "data": {},
+                "names": list(),
+                "data": dict(),
             }
             page = 1
             max_pages = 10
@@ -340,10 +340,9 @@ class Anime1_downloader:
                     submit_button.config(text="Submit")
                     url_text.config(state=tk.NORMAL)
                     return
-
-            data["names"].sort(
-                key=lambda x: int(re.search(r"\[(\d+(\.\d+)?)\]$", x).group(1))
-            )
+            # data["names"].sort(
+            #     key=lambda x: re.findall(r"\[(.*?)\]$", i)[-1]
+            # )
             if not data:
                 messagebox.showerror(
                     "Error",
