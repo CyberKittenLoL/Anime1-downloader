@@ -4,6 +4,7 @@ import os
 import re
 from bs4 import BeautifulSoup
 import requests
+from tkinter import messagebox
 
 HEADERS = {
     "accept": "/",
@@ -23,11 +24,14 @@ HEADERS = {
 
 DOWNLOADING_EXTENSION = ".downloading"
 
+API_URL = "https://v.anime1.me/api"
+
 
 class DownloadHelper:
-    def __init__(self, logger: logging = logging) -> None:
+    def __init__(self, download_path: str, logger: logging = logging) -> None:
+        self.download_path = download_path
         self.logger = logger
-        
+
         self.total_eps = 0
         self.download_stop = False
 
@@ -35,7 +39,7 @@ class DownloadHelper:
         self.total_size = 0
         self.downloaded_size = 0
         self.finished = 0
-        
+
         self.logger.debug("DownloadHelper initialized")
 
     def get_video_data_me(self, url: str) -> dict:
@@ -58,16 +62,21 @@ class DownloadHelper:
 
         # ----------- Fetching data from website -----------
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=10)
             response.raise_for_status()  # Raise an HTTPError for bad responses
+            # if response.status_code != 200:
+            #     self.logger.error(f"Failed to fetch URL {url}. Status code: {response.status_code}")
+            #     raise requests.RequestException(response)
         except requests.RequestException as e:
-            self.logger.error(f"Error fetching URL {url}: {e}")
-            return data
+            raise e
 
         # ----------- Parsing data -----------
-        soup = BeautifulSoup(response.text, "html.parser")
-        header_tag = soup.find("header", class_="page-header")
+        # Parse the HTML content using BeautifulSoup
 
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # ----------- Extracting title -----------
+        header_tag = soup.find("header", class_="page-header")
         if header_tag:
             title = header_tag.find("h1").text
         else:
@@ -79,6 +88,8 @@ class DownloadHelper:
                 self.logger.warning(f"Title not found for {url}")
 
         data["title"] = title
+
+        # ----------- Extracting video data -----------
         articles = soup.find_all("article")
         for article in articles:
             name_tag = article.find("h2", class_="entry-title")
@@ -95,21 +106,23 @@ class DownloadHelper:
                 data["names"].append(name)
                 data["data"][name] = video_data
             else:
-                self.logger.warning(f"Video element or data-apireq attribute not found in article for {url}")
+                self.logger.warning(
+                    f"Video element or data-apireq attribute not found in article for {url}"
+                )
 
         data["names"].reverse()  # Website is reversed
 
-        self.logger.info("Anime data fetched successfully")
-        self.logger.debug(f"Url: {url}")
+        soup.find_all("player_html5_api")
+
+        self.logger.debug("Anime data fetched successfully")
         return data
 
     def video_detail_api(self, session: requests.Session, d) -> dict:
         # Required session to work
 
-        url = "https://v.anime1.me/api"
         body = f"d={d}"
 
-        response = session.post(url, headers=HEADERS, data=body)
+        response = session.post(API_URL, headers=HEADERS, data=body)
         try:
             response_json = response.json()
             response_dict = dict(response_json)
@@ -118,47 +131,78 @@ class DownloadHelper:
             self.logger.error("Failed to decode JSON from response")
         return response_dict
 
+    @staticmethod
+    def get_expected_size(url: str, session: requests.Session = None) -> int:
+        """
+        Get the expected file size of a video from the server.
+        Args:
+            url (str): The URL of the video file.
+        Returns:
+            int: The expected file size in bytes.
+        """
+        header = HEADERS.copy()
+        if session is None:
+            head_response = requests.head(url, headers=header)
+        else:
+            head_response = session.head(url, headers=header)
+        if head_response.status_code != 200:
+            raise requests.RequestException(
+                f"Failed to get file size. Status code: {head_response.status_code}"
+            )
+
+        expected_size = int(head_response.headers.get("Content-Length", 0))
+        return expected_size
+
+    @staticmethod
+    def check_filename(path: str, filename: str) -> str:
+        checked_title: str = "".join(
+            c if c.isalnum() or c in "._-" else "_" for c in filename
+        )
+        checked_title = re.sub(r"_+", "_", checked_title)
+        if checked_title[-1] == "_":
+            checked_title = checked_title[:-1]
+        return os.path.join(path, f"{checked_title}.mp4")
+
     def download_video(
         self, _id, data: dict, session: requests.Session, chunk_size=8192
     ) -> None:
-        self.logger.info(f"{_id:>3} | Downloading video from {data['url']}")
         if self.download_stop:
             self.logger.debug(f"{str(_id):>3} | Download stopped")
             return
 
+        self.logger.info(f"{_id:>3} | Downloading video from {data['url']}")
+
         header = HEADERS.copy()
 
-        if self.process.get(_id, None) is not None:
+        if self.process.get(_id, None) is None:
+            self.process[_id] = {
+                "total_size": -1,
+                "downloaded_size": 0,
+                "finished": False,
+                "success": False,
+            }
+        if self.process[_id].get("loading", False):
             self.logger.debug(
                 f"{str(_id):>3} | Resuming download {self.process[_id]['downloaded_size'] / (1024 * 1024)/self.process[_id]['total_size']:.2%}"
             )
             header["Range"] = f"bytes={self.process[_id]['downloaded_size']}-"
+            output_path = self.check_filename(data["download_path"], str(_id))
+            output_path_temp = output_path + DOWNLOADING_EXTENSION
         else:
             # ------ Get the expected file size from the server ------
-            head_response = session.head(data["url"], headers=header)
-            if head_response.status_code != 200:
-                self.logger.error(
-                    f"Failed to get file size. Status code: {head_response.status_code}"
-                )
-                return
-            expected_size = int(head_response.headers.get("Content-Length", 0))
+            expected_size = self.get_expected_size(data["url"], session)
             expected_size_mb = expected_size / (1024 * 1024)
             self.logger.debug(
                 f"{str(_id):>3} | Expected file size: {expected_size_mb:.2f} MB"
             )
 
             # ---------------- Set file name and path ----------------
-            checked_title: str = "".join(
-                c if c.isalnum() or c in "._-" else "_" for c in _id
-            )
-            checked_title = re.sub(r"_+", "_", checked_title)
-            if checked_title[-1] == "_":
-                checked_title = checked_title[:-1]
-            output_path = os.path.join(data["download_path"], f"{checked_title}.mp4")
+            output_path = self.check_filename(data["download_path"], str(_id))
             output_path_temp = output_path + DOWNLOADING_EXTENSION
 
             #  ----------------- Init process -----------------
-            self.process[_id] = {"total_size": expected_size, "finished": False}
+            self.process[_id]["total_size"] = expected_size
+            self.process[_id]["loading"] = False
             self.total_size += expected_size
             downloaded = 0
 
@@ -168,7 +212,7 @@ class DownloadHelper:
                 if downloaded == expected_size:
                     self.downloaded_size += downloaded
                     self.process[_id]["downloaded_size"] = downloaded
-                    self.process[_id]["finished"] = True
+                    self.process[_id]["success"] = True
                     self.finished += 1
                     self.logger.debug(f"{str(_id):>3} | File already fully downloaded")
 
@@ -203,18 +247,28 @@ class DownloadHelper:
             data["url"], headers=header, stream=True
         )
 
-        # ----------------- Downloading -----------------
-        # if response.status_code == 416:
-        #     self.logger.debug(f"{str(_id):>3} | File already fully downloaded")
-        #     self.process[_id]["finished"] = True
-        #     self.finished += 1
-        #     return
+        # ------------------- Downloading -------------------
+        # Check for range not satisfiable
+        if response.status_code == 416:
+            # 416 Range Not Satisfiable
+            # The server cannot serve the requested range
+            # Re-download file
+            self.logger.warning(
+                f"{str(_id):>3} | Re-downloading file (Error response: 416)"
+            )
+            response: requests.Response = session.get(
+                data["url"], headers=HEADERS, stream=True
+            )
+
+        # ----------------- Downloading Success -----------------
         if response.status_code in [200, 206]:
             if not os.path.exists(data["download_path"]):
                 self.logger.debug(
                     f"{str(_id):>3} | Creating directory {data['download_path']}"
                 )
                 os.makedirs(data["download_path"])
+
+            self.process[_id]["loading"] = True
 
             with open(output_path_temp, "ab") as f:
                 for chunk in response.iter_content(chunk_size=chunk_size):
@@ -226,10 +280,12 @@ class DownloadHelper:
                         self.downloaded_size += len(chunk)
                         self.process[_id]["downloaded_size"] += len(chunk)
 
+            # ----------------- Download completed -----------------
             if os.path.exists(output_path):
                 os.remove(output_path)
             os.rename(output_path_temp, output_path)
-            self.process[_id]["finished"] = True
+            self.process[_id]["success"] = True
+            self.process[_id]["downloaded_size"] = self.process[_id]["total_size"]
             self.finished += 1
             self.logger.info(
                 f"{str(_id):>3} | Download completed successfully: {output_path}"
@@ -238,20 +294,35 @@ class DownloadHelper:
         # ----------------- Error handling -----------------
         elif response.status_code == 403:
             self.logger.error("403 Forbidden: Access to the resource is denied.")
+            self.process[_id]["success"] = False
             return
         else:
             self.logger.error(
                 f"{str(_id):^3} | Failed to download video. Status code: {response.status_code}. Message: {response.text}"
             )
+            self.process[_id]["success"] = False
 
-    def download_episode(self, _id, data, download_path) -> None:
+        # ----------------- Clean up -----------------
+        # del self.process[_id]
+
+    def download_episode(self, _id, data) -> None:
+        """
+        Downloads a specific episode of an anime.
+        Args:
+            _id (int): The ID of the episode to download.
+            data (dict): A dictionary containing the data of the anime, including episode details.
+        Returns:
+            None
+        Raises:
+            Exception: If there is an error fetching video data for the specified episode.
+        """
         session = requests.Session()
 
         try:
             api_data = self.video_detail_api(session, data["data"][_id])
             self.logger.debug(f"API Data: {api_data}")
             video_data = {
-                "download_path": f"{download_path}/{data['title']}",
+                "download_path": f"{self.download_path}/{data['title']}",
                 "url": "https:" + api_data["s"][0]["src"],
             }
             self.logger.debug(f"Video Data: {video_data}")
@@ -259,3 +330,8 @@ class DownloadHelper:
 
         except Exception as e:
             self.logger.error(f"Error fetching video data for {_id}: {e}")
+            raise e
+
+if __name__ == "__main__":
+    messagebox.showinfo("Info", "Please run the main file to start the download process.")
+    exit()
