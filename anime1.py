@@ -739,6 +739,9 @@ class Anime1_downloader:
             font=("Helvetica", 14),
         )
         self.root.exit_button.pack(side=tk.RIGHT, padx=10)
+        
+        self.root.bind("<Return>", lambda e: self.restart_app())
+        self.root.bind("<Escape>", lambda e: self.exit_app())
 
     def download_search(self, search):
         pass
