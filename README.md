@@ -42,7 +42,6 @@ For more information, refer to `anime1.py`.
 You can download the pre-built executable from the [releases page](https://github.com/CyberKittenLoL/anime1-downloader/releases).
 
 ## Future
-- Fix more than two page
 - Add other source
 - Change to use web UI rather than python tk
 - Change fully using web js request
