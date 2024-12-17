@@ -110,7 +110,26 @@ class DownloadHelper:
                     f"Video element or data-apireq attribute not found in article for {url}"
                 )
 
-        data["names"].reverse()  # Website is reversed
+        numeric_positions = [(i, int(re.search(r'\[(\d+)\]', name).group(1))) for i, name in enumerate(data['names']) if re.search(r'\[(\d+)\]', name)]
+
+        for i in range(len(numeric_positions) - 1):
+            start_pos, start_val = numeric_positions[i]
+            end_pos, end_val = numeric_positions[i + 1]
+            gap = end_pos - start_pos - 1
+            
+            if gap > 0:
+                for j in range(1, gap + 1):
+                    gap_pos = start_pos + j
+                    new_value = start_val + j * (end_val - start_val) / (gap + 1)
+                    original_string = data['names'][gap_pos]
+                    data['names'][gap_pos] = re.sub(r'\[.*?\]', f'[{new_value:.1f} {original_string[original_string.index("[") + 1:-1]}]', original_string)
+
+        
+        start = numeric_positions[0][1]
+        end = numeric_positions[-1][1]            
+        if start > end:
+            data["names"].reverse()
+            
 
         soup.find_all("player_html5_api")
 
@@ -156,7 +175,7 @@ class DownloadHelper:
     @staticmethod
     def check_filename(path: str, filename: str) -> str:
         checked_title: str = "".join(
-            c if c.isalnum() or c in "._-" else "_" for c in filename
+            c if c.isalnum() or c not in "/\\" or c in "._-" else "_" for c in filename
         )
         checked_title = re.sub(r"_+", "_", checked_title)
         if checked_title[-1] == "_":
@@ -198,7 +217,7 @@ class DownloadHelper:
 
             # ---------------- Set file name and path ----------------
             output_path = self.check_filename(data["download_path"], str(_id))
-            output_path_temp = output_path + DOWNLOADING_EXTENSION
+            output_path_temp = f"{output_path}{DOWNLOADING_EXTENSION}"
 
             #  ----------------- Init process -----------------
             self.process[_id]["total_size"] = expected_size
@@ -332,6 +351,88 @@ class DownloadHelper:
             self.logger.error(f"Error fetching video data for {_id}: {e}")
             raise e
 
+
+
+def test():
+    url = "https://anime1.me/category/2020%e5%b9%b4%e5%86%ac%e5%ad%a3/%e6%88%90%e7%be%a4%e7%b5%90%e4%bc%b4-%e8%a5%bf%e9%a0%93%e5%ad%b8%e5%9c%92"
+    response = requests.get(url)
+    data = {"title": "", "total episode": 0, "names": [], "data": {}}
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    articles = soup.find_all("article")
+    for article in articles:
+        name_tag = article.find("h2", class_="entry-title")
+        if name_tag:
+            name = name_tag.text.strip()
+        else:
+            name = "Unknown"
+            logging.warning(f"Name not found in article for {url}")
+
+        video_ele = article.find("video")
+        if video_ele and "data-apireq" in video_ele.attrs:
+            video_data = video_ele["data-apireq"]
+            data["total episode"] += 1
+            data["names"].append(name)
+            data["data"][name] = video_data
+        else:
+            player_space = article.find(class_="player-space")
+            if not player_space:
+                logging.warning(
+                    f"Video element or data-apireq attribute not found in article for {url}"
+                )
+            else:
+                src = player_space.find("button")["data-src"]
+                print(src)
+
+    data["names"].reverse()  # Website is reversed
+
+    print(data)
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    other_video = soup.find_all("player_html5_api")
+    print(other_video)
+
+def test2():
+    URL = r"https://ipp.anime1.me/DkiRr?autoplay=1"
+    session = requests.Session()
+    response = session.get(URL, headers=HEADERS)
+    
+    # {"c":"679",
+    # "e":"2b",
+    # "t":1731506121,
+    # "p":0,
+    # "s":"a424bc070358074db5a6b793fbe1f29e"}
+    
+    
+    soup = BeautifulSoup(response.text, "html.parser")
+    source = soup.find("source")
+    if source:
+        print(source["src"])
+        header = HEADERS.copy()
+        # response = requests.get(source["src"])
+        downloaded_size = 0
+        # response: requests.Response = session.get(
+        #     source["src"], headers=header, stream=True
+        # )
+        response: requests.Response = session.get(source["src"], headers=header)
+        print(response.status_code)
+        print(response.text)
+        # with open("temp.mp4", "ab") as f:
+        #     for chunk in response.iter_content(chunk_size=8192):
+        #         if chunk:
+        #             f.write(chunk)
+        #             downloaded_size += len(chunk)
+        
+        print(downloaded_size)
+        
+    else:
+        print("Not found")
+        print(response.text)
+        
 if __name__ == "__main__":
-    messagebox.showinfo("Info", "Please run the main file to start the download process.")
-    exit()
+    # messagebox.showinfo("Info", "Please run the main file to start the download process.")
+    # exit()
+    
+    # test()
+    test2()
