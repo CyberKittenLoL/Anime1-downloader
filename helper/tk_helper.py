@@ -39,7 +39,6 @@ class tkHelper:
         
         widget.unbind("<<Modified>>")
         url = widget.get("1.0", tk.END).strip()
-        self.logger.debug(f"Url: {url}")
         
         decoded_url = None
         if '%' in url:
@@ -56,7 +55,70 @@ class tkHelper:
         
         widget.bind("<<Modified>>", lambda e: self.txt_on_modified(e))
 
+
+class InputWithPlaceholder(tk.Entry):
+    def __init__(self, master=None, placeholder="PLACEHOLDER", bg='grey', fg='', **kwargs):
+        super().__init__(master, **kwargs)
+        self.placeholder = placeholder
+        self.placeholder_color = bg
+        if not fg:
+            self.default_fg_color = self["fg"]
+        else:
+            self.default_fg_color = fg
+
+        self.bind("<FocusIn>", self.foc_in)
+        self.bind("<FocusOut>", self.foc_out)
+
+        self.put_placeholder()
+        
+    def put_placeholder(self):
+        self.insert(0, self.placeholder)
+        self["fg"] = self.placeholder_color
+        
+    def foc_in(self, *args):
+        if self["fg"] == self.placeholder_color:
+            self.delete('0', 'end')
+            self["fg"] = self.default_fg_color
+            
+    def foc_out(self, *args):
+        if not self.get():
+            self.put_placeholder()
+            
+    def get(self):
+        if self["fg"] == self.placeholder_color:
+            return ""
+        return super().get()
     
+    def set(self, value):
+        self.delete('0', 'end')
+        self.insert('0', value)
+        self["fg"] = self.default_fg_color
+        
+    def clear(self):
+        self.delete('0', 'end')
+        self.put_placeholder()
+        
+    def bind(self, sequence=None, func=None, add=None):
+        if sequence in ("<FocusIn>", "<FocusOut>"):
+            if add is None or add == "+":
+                # Add the new function to the existing binding
+                super().bind(sequence, lambda event, f=func: (f(event), self.foc_in(event) if sequence == "<FocusIn>" else self.foc_out(event)), add="+")
+            else:
+                # Replace the existing binding
+                super().bind(sequence, func, add)
+        else:
+            super().bind(sequence, func, add)
+            
+    def config(self, **kwargs):
+        if placeholder := kwargs.get("placeholder"):
+            self.placeholder = placeholder
+        if color := kwargs.get("color"):
+            self.placeholder_color = color
+        if fg := kwargs.get("fg"):
+            self.default_fg_color = fg
+        self.put_placeholder()
+        
+
 class DownloadProgressBar:
     def __init__(self, root, total_size, label, vertical=False):
         self.root = root
