@@ -215,12 +215,13 @@ class Anime1_downloader:
             # Check if the URL is valid
             self.logger.debug("Testing URL: %s", url)
             is_url = re.match(r"https?://anime1\.(?:me|pw)", url)
-            session = requests.Session()
-
+            # session = requests.Session()
+            status_code = 200
             if is_url:
                 url = url.split("/page")[0]
                 try:
-                    url_response = session.get(url, timeout=10)
+                    # url_response = session.get(url, timeout=10)
+                    data_temp = self.download_helper.get_video_data_me(url)
                 except requests.exceptions.ReadTimeout:
                     self.logger.error("Timeout fetching URL: %s", url)
                     messagebox.showerror(
@@ -231,6 +232,8 @@ class Anime1_downloader:
                     submit_button.config(text="Submit")
                     url_text.config(state=tk.NORMAL)
                     return
+                except requests.RequestException as e:
+                    status_code = e.response.status_code
             else:
 
                 class A:
@@ -241,8 +244,11 @@ class Anime1_downloader:
                 url_response = A()
 
             # Check base URL is valid
-            if url_response.status_code != 200:
-                if url_response.status_code == 403:
+            # TODO: Check if this modify can be removed
+            # if url_response.status_code != 200:
+            if status_code != 200:
+                # if url_response.status_code == 403:
+                if status_code == 403:
                     self.logger.error(
                         "Forbidden (%i): %s",
                         url_response.status_code,
@@ -274,8 +280,9 @@ class Anime1_downloader:
                 "names": list(),
                 "data": dict(),
             }
-            page = 1
+            page = 2
             max_pages = 10
+            data["title"] = data_temp["title"]
             while True:
                 url_temp = f"{url}/page/{page}"
                 if page > max_pages + 1:
@@ -296,13 +303,11 @@ class Anime1_downloader:
                         max_pages = min(max_pages, 1500)
                         self.logger.debug("Max pages: %s", max_pages)
                 try:
-                    data_temp = self.download_helper.get_video_data_me(url_temp)
-                    if page == 1:
-                        data["title"] = data_temp["title"]
                     if data["title"] != data_temp["title"]:
+
                         choice = messagebox.askyesnocancel(
                             "Warning",
-                            "The title of the anime has changed. Do you want to continue with the new title (yes), original (no), or enter a custom title(cancel)?",
+                            f"The title of the anime has changed.\nOriginal: {data['title']}\nCurrent:{data_temp['data']} Do you want to continue with the new title (yes), original (no), or enter a custom title(cancel)?",
                         )
                         if choice is not None:
                             if choice:
@@ -317,9 +322,10 @@ class Anime1_downloader:
                                 else:
                                     break
                     data["total episode"] += data_temp["total episode"]
-                    data["names"].extend(data_temp["names"])
+                    data["names"] = data_temp["names"] + data["names"]
                     data["data"].update(data_temp["data"])
                     page += 1
+                    data_temp = self.download_helper.get_video_data_me(url_temp)
                 except requests.exceptions.ReadTimeout:
                     self.logger.error("Timeout fetching page: %s", url_temp)
                     messagebox.showerror(
@@ -340,9 +346,8 @@ class Anime1_downloader:
                     submit_button.config(text="Submit")
                     url_text.config(state=tk.NORMAL)
                     return
-            # data["names"].sort(
-            #     key=lambda x: re.findall(r"\[(.*?)\]$", i)[-1]
-            # )
+
+            data["title"] = data["title"].replace("/", "-")
             if not data:
                 messagebox.showerror(
                     "Error",
@@ -367,7 +372,8 @@ class Anime1_downloader:
         submit_button.pack(pady=40)
 
         url_text.bind("<Return>", lambda e: on_submit())
-        
+        self.root.bind("<Escape>", lambda e: self.exit_app())
+
         url_text.focus_set()
 
     def selected_episodes_ui(self, data) -> None:
@@ -387,6 +393,7 @@ class Anime1_downloader:
         The UI allows users to select episodes from a list and initiate the download process.
         """
         selected_all = False
+
         def select_all():
             nonlocal selected_all
             selected_all = not selected_all
@@ -656,7 +663,7 @@ class Anime1_downloader:
                                         ep_state["downloaded_size"],
                                         max(ep_state["total_size"], 0),
                                     )
-                                    
+
                                 else:
                                     # Waiting for download (fetched details of the video)
                                     self.ep_processbar_dict[episode].label.config(
@@ -694,14 +701,14 @@ class Anime1_downloader:
         #     self.ep_processbar_dict[episode].frame.destroy()
         # self.root.frame.destroy()
 
-        self.root.h1 = tk.Label(
+        h1 = tk.Label(
             self.root,
             text="Download Completed",
             bg="black",
             fg="white",
             font=("Helvetica", 16),
         )
-        self.root.h1.pack(pady=20)
+        h1.pack(pady=20)
 
         button_frame = tk.Frame(self.root, bg="black")
         button_frame.pack(pady=20)
@@ -709,7 +716,7 @@ class Anime1_downloader:
         folder_location = (
             f"{self.download_path}/{title}" if title is not None else self.download_path
         )
-        self.root.open_folder = tk.Button(
+        open_folder = tk.Button(
             button_frame,
             text="Open Folder",
             command=lambda: os.startfile(folder_location),
@@ -717,9 +724,9 @@ class Anime1_downloader:
             fg="white",
             font=("Helvetica", 14),
         )
-        self.root.open_folder.pack(side=tk.LEFT, padx=10, pady=10)
+        open_folder.pack(side=tk.LEFT, padx=10, pady=10)
 
-        self.root.download_another = tk.Button(
+        download_another = tk.Button(
             button_frame,
             text="Download Another Anime",
             command=self.restart_app,
@@ -727,9 +734,9 @@ class Anime1_downloader:
             fg="white",
             font=("Helvetica", 14),
         )
-        self.root.download_another.pack(side=tk.LEFT, padx=10)
+        download_another.pack(side=tk.LEFT, padx=10)
 
-        self.root.exit_button = tk.Button(
+        exit_button = tk.Button(
             button_frame,
             text="Exit",
             command=self.exit_app,
@@ -737,10 +744,10 @@ class Anime1_downloader:
             fg="white",
             font=("Helvetica", 14),
         )
-        self.root.exit_button.pack(side=tk.RIGHT, padx=10)
-        
-        self.root.bind("<Return>", lambda e: self.restart_app())
-        self.root.bind("<Escape>", lambda e: self.exit_app())
+
+        exit_button.pack(side=tk.RIGHT, padx=10)
+
+        exit_button.bind("<Return>", lambda e: self.restart_app())
 
     def download_search(self, search):
         pass
@@ -815,7 +822,6 @@ class Anime1_downloader:
         if code is None:
             code = self.exit_code
 
-        self.logger.debug("Exiting (%s)", code)
         self.exit_code = code
         self.root.destroy()
         self.root.quit()
