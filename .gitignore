@@ -128,8 +128,12 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# Custom
+# vscode
 .history/
+tempCodeRunnerFile.*
+.vscode/
+
+# Custom
 config_anime1.ini
 config.ini
 logs/
