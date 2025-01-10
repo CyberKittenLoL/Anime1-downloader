@@ -411,7 +411,7 @@ class Anime1_downloader:
                 selected_episodes.append(listbox.get(i))
             download_button.config(text=f"Download ({len(selected_episodes)})")
 
-        self.root.title(f"Anime1 Downloader {data["title"]}")
+        self.root.title(f"Anime1 Downloader {data['title']}")
         tkHelper.center_window(self.root, 500, 600)
 
         frame = tk.Frame(self.root, bg="black")
