@@ -214,7 +214,7 @@ class Anime1_downloader:
 
             # Check if the URL is valid
             self.logger.debug("Testing URL: %s", url)
-            is_url = re.match(r"https?://anime1\.(?:me|pw)", url)
+            is_url = re.match(r"https?://anime1\.(?:me|pw)", url) # anime1.in have different structure
             # session = requests.Session()
             status_code = 200
             if is_url:
@@ -242,6 +242,8 @@ class Anime1_downloader:
                         self.text = "Invalid URL, unable to fetch data"
 
                 url_response = A()
+                return url_response
+                
 
             # Check base URL is valid
             # TODO: Check if this modify can be removed
