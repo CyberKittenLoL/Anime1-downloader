@@ -4,7 +4,7 @@ import os
 import re
 from bs4 import BeautifulSoup
 import requests
-from tkinter import messagebox
+from pprint import pprint
 
 HEADERS = {
     "accept": "/",
@@ -124,15 +124,16 @@ class DownloadHelper:
                     original_string = data['names'][gap_pos]
                     data['names'][gap_pos] = re.sub(r'\[.*?\]', f'[{new_value:.1f} {original_string[original_string.index("[") + 1:-1]}]', original_string)
 
-        
-        start = numeric_positions[0][1]
-        end = numeric_positions[-1][1]            
-        if start > end:
-            data["names"].reverse()
-            
+        if numeric_positions:
+            start = numeric_positions[0][1]
+            end = numeric_positions[-1][1]            
+            if start > end:
+                data["names"].reverse()
+        else:
+            self.logger.error("No video found in the page")
+            return None
 
         soup.find_all("player_html5_api")
-
         self.logger.debug("Anime data fetched successfully")
         return data
 
